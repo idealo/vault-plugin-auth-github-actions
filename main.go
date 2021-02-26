@@ -54,6 +54,7 @@ func Backend(c *logical.BackendConfig) *backend {
 	paths := []*framework.Path{
 		b.pathConfig(),
 		b.pathLogin(),
+		b.pathUsers(),
 		b.pathOrganizations(),
 		b.pathRepositories(),
 	}

@@ -64,6 +64,12 @@ you use the published checksums to verify integrity.
 ```
 
 
+### Assign a default policy to all repositories in your account
+
+```
+$ vault write auth/github-actions/users/Mongey policies=admin
+```
+
 ### Assign a default policy to all repositories in your organization
 
 ```

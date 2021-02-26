@@ -15,6 +15,8 @@ import (
 
 const (
 	RUN_IN_PROGRESS = "in_progress"
+	OWNER_TYPE_ORG  = "Organization"
+	OWNER_TYPE_USER = "User"
 )
 
 func (b *backend) pathLogin() *framework.Path {
@@ -92,25 +94,42 @@ func (b *backend) pathAuthLogin(ctx context.Context, req *logical.Request, d *fr
 	}
 
 	var policies []string
-	organizationEntry, err := b.Organization(ctx, req.Storage, owner)
+
+	switch run.Repository.GetOwner().GetType() {
+	case OWNER_TYPE_ORG:
+		organizationEntry, err := b.Organization(ctx, req.Storage, owner)
+		if err != nil {
+			b.Logger().Warn(fmt.Sprintf("unable to retrieve %s: %s", owner, err.Error()))
+		}
+		if organizationEntry == nil {
+			b.Logger().Debug(fmt.Sprintf("unable to find %s, does not currently exist", owner))
+		}
+		if len(organizationEntry.Policies) > 0 {
+			policies = append(policies, organizationEntry.Policies...)
+		}
+	case OWNER_TYPE_USER:
+		userEntry, err := b.User(ctx, req.Storage, owner)
+		if err != nil {
+			b.Logger().Warn(fmt.Sprintf("unable to retrieve %s: %s", owner, err.Error()))
+		}
+		if userEntry == nil {
+			b.Logger().Debug(fmt.Sprintf("unable to find %s, does not currently exist", owner))
+		}
+		if len(userEntry.Policies) > 0 {
+			policies = append(policies, userEntry.Policies...)
+		}
+	}
+
+	repositoryEntry, err := b.Repository(ctx, req.Storage, owner+"/"+repository)
 	if err != nil {
-		b.Logger().Warn(fmt.Sprintf("unable to retrieve %s: %s", owner, err.Error()))
+		b.Logger().Warn(fmt.Sprintf("unable to retrieve %s/%s: %s", owner, repository, err.Error()))
 	}
-
-	if organizationEntry == nil {
-		b.Logger().Debug(fmt.Sprintf("unable to find %s, does not currently exist", owner))
-	}
-
-	policies = append(policies, organizationEntry.Policies...)
-	repositoryEntry, err := b.Repository(ctx, req.Storage, fullRepoName)
-	if err != nil {
-		b.Logger().Warn(fmt.Sprintf("unable to retrieve %s: %s", fullRepoName, err.Error()))
-	}
-
 	if repositoryEntry == nil {
-		b.Logger().Debug(fmt.Sprintf("unable to find %s, does not currently exist", fullRepoName))
+		b.Logger().Debug(fmt.Sprintf("unable to find %s/%s, does not currently exist", owner, repository))
 	}
-	policies = append(policies, repositoryEntry.Policies...)
+	if len(repositoryEntry.Policies) > 0 {
+		policies = append(policies, repositoryEntry.Policies...)
+	}
 
 	return &logical.Response{
 		Auth: &logical.Auth{
@@ -123,7 +142,8 @@ func (b *backend) pathAuthLogin(ctx context.Context, req *logical.Request, d *fr
 			},
 			Policies: policies,
 			Metadata: map[string]string{
-				"owner": owner,
+				"owner":      owner,
+				"repository": repository,
 			},
 			LeaseOptions: logical.LeaseOptions{
 				TTL:       30 * time.Second,
